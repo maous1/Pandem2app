@@ -18,8 +18,7 @@ ui <- fluidPage(
       fluidRow(
 
         fileInput("upVariant", "trainset", accept = c(".csv", ".tsv")),
-        dataTableOutput("headVariant")
-
+        dataTableOutput("headVariant"),
       )
     ),
     tabPanel(
@@ -44,12 +43,24 @@ ui <- fluidPage(
         selectInput("class","Colonne", choices = character(),multiple = T),
         dataTableOutput("class")
       ),
-      fluidRow(
+      fluidRow(column(6,
         numericInput("factor", "factor", 500,
                      1, 10000000, 1)),
+        column(6,
+        selectInput("geolocalisation","Split by", choices = character())
+        )),
       fluidRow(
         actionButton("button", "Go simulate!"),
+        dataTableOutput("knn"),
         downloadButton("download", "Download .csv"))
+
+    ),
+    tabPanel(
+      "4) Visualisation Knn",
+      fluidRow(
+        plotOutput("plotknn")
+
+      )
 
     )
   )
@@ -81,25 +92,31 @@ server <- function(input, output, session) {
   observeEvent(dataVariant(), {
     updateSelectInput(session, "var", choices = names(dataVariant()))
   })
+
   output$single <- renderDataTable({dataVariant()[input$var]},options = list(pageLength = 5))
   observeEvent(dataAge(), {
     updateSelectInput(session, "class", choices = names(dataAge()))
   })
+
+  observeEvent(dataAge(), {
+    updateSelectInput(session, "geolocalisation", choices = names(dataAge()))
+  })
   output$class <- renderDataTable({dataAge()[input$class]},options = list(pageLength = 5))
 
-  knn <- eventReactive(input$simulate, {
-    simulator(trainset =  dataVariant(),testset = dataAge(),outcome = "variant",time = "time",geolocalisation = "country",factor = 500,count = "new_cases")
-  })
+  dataknn <- eventReactive(input$button, {
+    simulator(trainset = dataVariant(),testset = dataAge(),geolocalisation =input$geolocalisation,outcome = input$var,count = 'new_cases', time= input$class,factor = input$factor)
 
-  output$knn <- renderDataTable(knn(),options = list(pageLength = 5))
+    })
+
+  output$knn <- renderDataTable(dataknn(),options = list(pageLength = 5))
 
 
-   output$download <- downloadHandler(
+  output$download <- downloadHandler(
     filename = function() {
       paste0("knn", ".csv")
     },
     content = function(file) {
-      vroom::vroom_write(knn(), file)
+      vroom::vroom_write(dataknn(), file)
     }
   )
 
@@ -108,10 +125,10 @@ server <- function(input, output, session) {
 
   uniq_variant <- reactive({
     uniq_variant <- unique(dataVariant()$variant)
-  myColors <- rainbow(length(uniq_variant))
-  names(myColors) <- uniq_variant
-  myColors[names(myColors)=="NSQ"] = "#606060"
-  colScale <- scale_fill_manual(name = "variant",values = myColors)
+    myColors <- rainbow(length(uniq_variant))
+    names(myColors) <- uniq_variant
+    myColors[names(myColors)=="NSQ"] = "#606060"
+    colScale <- scale_fill_manual(name = "variant",values = myColors)
   })
   output$plot <- renderPlot({
     ggplot(data=dataVariant(), aes(x=time, y=new_cases, fill=variant)) +
@@ -122,6 +139,12 @@ server <- function(input, output, session) {
     ggplot(data=dataAge(), aes(x=time, y=new_cases)) +
       geom_bar(stat="identity") + ggtitle("Belgium")+ xlab("Group age") + ylab("number")+facet_wrap(vars(age_group))+ theme(axis.text.x = element_text(angle = 90))
 
+  }, res = 96)
+
+  output$plotknn <- renderPlot({
+    ggplot(data=dataknn(), aes(x=time, y=new_cases, fill=variant)) +
+      geom_bar(stat="identity") + ggtitle("BE prediction") + theme(axis.text.x = element_text(angle = 90))+
+      uniq_variant() + facet_wrap(vars(age_group))
   }, res = 96)
 
 }

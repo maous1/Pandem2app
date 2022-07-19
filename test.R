@@ -20,7 +20,7 @@ server <- function(input, output, session) {
   })
 
   output$hist <- renderPlot({
-    freqpoly(x1(), x2(), binwidth = 1, xlim = c(0, 40))
+    plot(x1(), x2(), binwidth = 1, xlim = c(0, 40))
   }, res = 96)
 }
 shinyApp(ui, server)
