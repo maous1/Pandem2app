@@ -12,13 +12,22 @@ ui <- fluidPage(
       "1) Upload",
       fluidRow(
 
-        fileInput("upAge", "testset", accept = c(".csv", ".tsv")),
-        dataTableOutput("headAge")
+        fileInput("upAge", "testset", accept = c(".csv", ".tsv"))
       ),
       fluidRow(
 
-        fileInput("upVariant", "trainset", accept = c(".csv", ".tsv")),
+        dataTableOutput("headAge"),
+        plotOutput("plot2")
+      ),
+      fluidRow(
+
+        fileInput("upVariant", "trainset", accept = c(".csv", ".tsv"))
+
+      ),
+      fluidRow(
+
         dataTableOutput("headVariant"),
+        plotOutput("plot")
       )
     ),
     tabPanel(
@@ -167,6 +176,9 @@ server <- function(input, output, session) {
       geom_bar(stat="identity") + ggtitle("BE prediction") + theme(axis.text.x = element_text(angle = 90))+
       uniq_variant() + facet_wrap(vars(age_group))
   }, res = 96)
+
+
+
   observeEvent(dataknn(), {
     updateSelectInput(session, "variable", choices = names(dataknn()))
   })
