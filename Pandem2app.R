@@ -8,10 +8,10 @@ library(ggplot2)
 library(Pandem2Application)
 options(shiny.maxRequestSize = 20 * 1024^2)
 
-#Note : la colonne de temps doit être nomme "time". La colonne pour le nombre de cas doit être nommé "cases"
+#Note : la colonne de temsp doit être nomme "time". La colonne pour le nombre de cas doit être nommé "cases"
 
 ###Functions
-#For Ramdom simulator
+#For Random simulator
 
 NumberUIRandom <- function(id){
     ns <- NS(id)
@@ -65,6 +65,7 @@ ui <- fluidPage(
                             padding-bottom:0 !important;
                             height: 90px;
                             font-size: 25px ! important;
+                            text-align: center;
                             }
                            .navbar {min-height:35px !important;}')),
     ),
@@ -80,11 +81,11 @@ ui <- fluidPage(
                     h3("Upload data"),br(),
                     fileInput("dataset", "The dataset to which we will add a metadata. The number of cases column must be named 'cases'.", accept = c(".csv", ".tsv")),
                     h3("Simulation type"),br(),
-                    radioButtons("simulationtype", label = ("Which type of simulation do you want to use ?"), choices = c("Ramdom simulation", "Data driven simulation"), selected = NULL)
+                    radioButtons("simulationtype", label = ("Which type of simulation do you want to use ?"), choices = c("Random simulation", "Data driven simulation"), selected = NULL)
                 ),
                 mainPanel(
                     conditionalPanel(
-                        condition = "input.simulationtype == 'Ramdom simulation'",
+                        condition = "input.simulationtype == 'Random simulation'",
                         br(), h3("Random simulation"), br(),
                         textInput("nomVariable", "Name new variable", value = "", placeholder =  "vaccination"),
                         numericInput("numInputs", "How many inputs do you want ?", 2),
@@ -109,7 +110,7 @@ ui <- fluidPage(
                             h3("Add data"), br(),
                             fileInput("addData", "Upload new dataset. The number of cases column must be named 'cases'.", accept = c(".csv", ".tsv")),
                             selectInput("var","Select one column for outcome", choices = character()),
-                            selectInput("class","Select the names of the columns for which you want a classification", choices = character(), multiple = T),
+                            selectInput("class","Select the names of the columns for which you want a classification", choices = character(), multiple = T), #Colonne (time) les colommunes dont on veut une classification
                             br(),
                             actionButton("simulatebtn", "Go simulate!", class = "btn-primary"), 
                             br(), br(), br(),
@@ -120,7 +121,7 @@ ui <- fluidPage(
                             radioButtons("split", label = "Split by", choices = c("Yes", "No"), selected = "No"),
                             conditionalPanel(
                               condition = "input.split == 'Yes'",
-                              selectInput("geolocalisation","Which column ?", choices = character(), selected = 1),
+                              selectInput("geolocalisation","Which column ?", choices = character(), selected = 1), #Split by (geolocalisation)
                             ),
                             numericInput("factor", "Sequence number used by time for the trainset to reduce the execution time (factor)", 500, 1, 10000000, 1)
                            )
@@ -130,61 +131,109 @@ ui <- fluidPage(
             )
         ),
         tabPanel(
-          "2) Enrichment",
+          HTML("2) Visualization <br/> datasets"), 
           sidebarLayout(
             sidebarPanel(
-              h3("Parameters"), br(),
-              h5("On which variable(s) and group(s) do you want to apply enrichment ?", style="color:#555658; font-weight:bold"), 
-              fluidRow(
-                column(4,
-                       selectInput("variable", "Variable", choices = character()),
+              h3("Graph display of parameters"), br(),
+              selectInput("colordata","Select the variable with color (eg. variant)", choices = character()),
+              selectInput("paneldata","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
+              radioButtons("Qfilterdata", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
+              conditionalPanel(
+                condition = "input.Qfilterdata == 'Yes'",
+                h5("Which one ?", style="color:#555658; font-weight:bold"),
+                fluidRow(
+                  column(4,
+                         selectInput("filterdata","Variable", choices = character()),
+                  ),
+                  column(4,
+                         uiOutput('filtergroupdata')
+                  )
                 ),
-                column(4,
-                       uiOutput('variablegroup'),
-                )
               ),
-              div(id="placeholder"),
-              fluidRow(
-                column(6,
-                  
-                ),
-                column(4,
-                       actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-secondary"),
-                )
-              ),
-              br(), 
-              selectInput("variant","Based on/From which variable ? ", choices = character()),
-              uiOutput('vargroup'),
-              numericInput("multiplicateur", "Multiplication factor", 1.2,
-                           1, 10000000, 0.1),
-              actionButton("enrichmentbtn", "Go enrichment!", class = "btn-primary"),
+              br(),
+              actionButton("addgraphdatabtn", "Display graph", class = "btn-primary")
             ),
             mainPanel(
               br(),
-              verbatimTextOutput("out"),
-              dataTableOutput("enrichment")
+              plotOutput("plot1")
             )
           )
         ),
         tabPanel(
-            "3) Visualisation",
+          "3) Enrichment",
+          sidebarLayout(
+            sidebarPanel(
+              h3("Parameters"), br(),
+              h5("Which level of which variable (eg. variant) and group (eg. B.1.1.7) do you want to enrich ?", style="color:#555658; font-weight:bold"),
+              fluidRow(
+                column(4,
+                       selectInput("variant","Variable ", choices = character()),
+                ),
+                column(4,
+                       uiOutput('vargroup'),
+                ),
+              ),
+              h5("In which variable(s) and group(s) do you want to apply the enrichment (eg. age_group <15y) ?", style="color:#555658; font-weight:bold"), 
+              fluidRow(
+                column(4,
+                       selectInput("variable1", "Variable", choices = character()),
+                ),
+                column(4,
+                       uiOutput('variablegroup'),
+                ),
+              ),
+              div(id="placeholder"),
+              fluidRow(
+                column(5,
+                       
+                ),
+                column(2,
+                       actionButton("cancelvariablebtn", "Cancel", class = "btn-secondary"),
+                ),
+                column(3,
+                       actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-secondary"),
+                ),
+              ),
+              numericInput("multiplicateur", "Multiplication factor", 1.2,
+                           1, 10000000, 0.1),
+              actionButton("enrichmentbtn", "Go enrichment!", class = "btn-primary")
+            ),
+            mainPanel(
+              br(),
+              #verbatimTextOutput("out"),
+              dataTableOutput("enrichment"),
+              br(),
+              downloadButton("downloadenrichment", "Download .csv", class = "btn-success")
+            )
+          )
+        ),
+        tabPanel(
+            HTML("4) Visualization <br/> enrichment"),
             sidebarLayout(
                 sidebarPanel(
-                    h3("Graph display parameters"), br(),
-                    selectInput("color","Select the color", choices = character()),
-                    selectInput("panel","Select the panel", choices = character()),
+                    h3("Graph display of parameters"), br(),
+                    selectInput("color","Select the variable with color (eg. variant)", choices = character()),
+                    selectInput("panel","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
                     radioButtons("Qfilter", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
                     conditionalPanel(
                       condition = "input.Qfilter == 'Yes'",
-                      selectInput("filter","Which one?", choices = character()),
-                      uiOutput('filtergroup')
+                      h5("Which one ?", style="color:#555658; font-weight:bold"),
+                      fluidRow(
+                        column(4,
+                               selectInput("filter","Variable", choices = character()),
+                        ),
+                        column(4,
+                               uiOutput('filtergroup')
+                        )
+                      ),
                     ),
                     br(),
-                    actionButton("addgraphbtn", "Display graph", class = "btn-primary")
+                    actionButton("addgraphbtn", "Display graphs", class = "btn-primary")
                 ),
                 mainPanel(
-                  br(), br(),
-                  plotOutput("plots")
+                  br(),
+                  plotOutput("plots"),
+                  plotOutput("plotenrich")
                 )
             )
         )
@@ -278,22 +327,49 @@ server <- function(input, output, session) {
     
     output$knn <- renderDataTable(dataknn(),options = list(pageLength = 10, scrollX=TRUE))
     
+    ### Visualization datasets
+    
+    observeEvent(input$simulatebtn, {
+      col <- dataset %>% select(!c("time", "cases"))
+      updateSelectInput(session, "colordata", choices = names(col))
+      updateSelectInput(session, "paneldata", choices = names(col))
+      updateSelectInput(session, "filterdata", choices = names(col))
+    })
+    
+    output$filtergroupdata <- renderUI({
+      selectInput("filtergroupdata","Group", choices = unique(dataset[, input$filterdata]))
+    })
+
+    output$plot1 <- renderPlot({  #Probleme de data dans les plots ? toujours le même résultat 
+      req(input$addgraphdatabtn, input$dataset)
+      if (input$Qfilterdata=="Yes") {
+        res <- filter(dataset, get(input$filterdata) == input$filtergroupdata)
+        ggplot(data=res, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, input$filterdata, sep=" ")) +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata) #facet_grid(get(input$filter) ~ get(input$panel))
+      }
+      else {
+        ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, sep=" ")) +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata)
+      }    
+    }, res = 96)
+    
+    
     ### Enrichment
     
     observeEvent(input$simulatebtn, {
       col <- dataset %>% select(!c("time", "cases"))
-      updateSelectInput(session, "variable", choices = names(col))
+      updateSelectInput(session, "variable1", choices = names(col))
       updateSelectInput(session, "variant", choices = names(col))
     })
     
     output$variablegroup <- renderUI({
-      selectInput("gp","Group", choices = unique(dataset[, input$variable]))
+      selectInput("gp","Group", choices = unique(dataset[, input$variable1]))
     })
     
     handler <- reactiveVal(list())
     observeEvent(input$addvariablebtn, {
       new_id <- paste("row", input$addvariablebtn, sep = "_")
-      print(input$addvariablelabel)
+      reactive
       insertUI(
         selector = "#placeholder",
         where = "beforeBegin",
@@ -313,44 +389,28 @@ server <- function(input, output, session) {
     })
     
     output$vargroup <- renderUI({
-      selectInput("groupvar","In which group?", choices = unique(dataset[, input$variant]))
+      selectInput("groupvar","Group", choices = unique(dataset[, input$variant]))
     })
     
+    output$downloadenrichment <- downloadHandler(
+      filename = function() {
+        paste0("enrichment", ".csv")
+      },
+      content = function(file) {
+        vroom::vroom_write(enrichment(), file)
+      }
+    )
+    
     enrichment <- eventReactive(input$enrichmentbtn,{
-      
-      print(input$variant)
-      print(input$groupvar)
-      print(input$addvariablelabel)
-      enrichment_variant(data_aggregated = dataset, 
-                         variable = c("age_group"), group = c("<15yr"),
+      enrichment_variant(data_aggregated = dataset, # sample_n(dataset,12), 
+                         variable = c(input$variable1), group = c(input$gp),
                          col_enrichment = input$variant, group_enrichment=input$groupvar,
-                         multiplicateur = input$multiplicateur, time = "time")
+                         multiplicateur = input$multiplicateur, time ="time")
     })
     
     output$enrichment <- renderDataTable(enrichment(),options = list(pageLength = 10))
   
-    ### Visualisation
-    
-    uniq_variant <- reactive({ #Color à changer
-      uniq_variant <- unique(dataAdd()$variant)
-      myColors <- rainbow(length(uniq_variant))
-      names(myColors) <- uniq_variant
-      myColors[names(myColors)=="NSQ"] = "#606060"
-      colScale <- scale_fill_manual(name = "variant",values = myColors)
-    })
-    
-    output$plots <- renderPlot({  
-      req(input$addgraphbtn, input$dataset)
-      if (input$Qfilter=="Yes") {
-        res <- filter(dataset, get(input$filter) == input$filtergroupres)
-        ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filter, sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
-      }
-      else {
-        ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
-      }    
-    }, res = 96)
+    ### Visualization Enrichment
     
     observeEvent(input$simulatebtn, {
       col <- dataset %>% select(!c("time", "cases"))
@@ -360,8 +420,42 @@ server <- function(input, output, session) {
     })
     
     output$filtergroup <- renderUI({
-      selectInput("filtergroupres","Which group?", choices = unique(dataset[, input$filter]))
+      selectInput("filtergroups", "Group", choices = unique(dataset[, input$filter]))
     })
+    
+    uniq_variant <- reactive({ #Color à changer
+      uniq_variant <- unique(dataAdd()$variant) #uniq_variant <- unique(dataset[, input$color]
+      myColors <- rainbow(length(uniq_variant))
+      names(myColors) <- uniq_variant
+      myColors[names(myColors)=="NSQ"] = "#606060"
+      colScale <- scale_fill_manual(name = "variant",values = myColors)
+    })
+    
+    output$plots <- renderPlot({ 
+      req(input$addgraphbtn, input$dataset)
+      if (input$Qfilter=="Yes") {
+        res <- filter(dataset, get(input$filter) == input$filtergroups)
+        ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filter, "without enrichment", sep=" ")) +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel) #facet_grid(get(input$filter) ~ get(input$panel))
+      }
+      else {
+        ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, "without enrichment", sep=" ")) +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+      }    
+    }, res = 96)
+    
+    output$plotenrich <- renderPlot({ 
+      req(input$addgraphbtn, enrichment())
+      if (input$Qfilter=="Yes") {
+        res <- filter(enrichment(), get(input$filter) == input$filtergroups)
+        ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel) #facet_wrap(vars(group))
+      }
+      else {
+        ggplot(data=enrichment(), aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+      }
+    }, res = 96)
     
 }
 
