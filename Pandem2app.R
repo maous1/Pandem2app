@@ -48,11 +48,12 @@ row_ui <- function(id) {
 
 row_server <- function(input, output, session) {
   return_value <- reactive({input$addgplabel})
+  return_value2 <- reactive({input$addvariableinput})
   ns <- session$ns
   output$ui_placeholder <- renderUI({
     selectInput(ns("addgplabel"),"Group", choices = unique(dataset[, input$addvariableinput]))
   })
-  list(return_value = return_value) 
+  list(return_value = return_value, return_value2 = return_value2) 
 }
 
 
@@ -79,7 +80,7 @@ ui <- fluidPage(
                 sidebarPanel(
                     width = 4,
                     h3("Upload data"),br(),
-                    fileInput("dataset", "The dataset to which we will add a metadata. The number of cases column must be named 'cases'.", accept = c(".csv", ".tsv")),
+                    fileInput("dataset", "The dataset to which we will add a metadata. The name of the column reporting the number of cases must be named 'cases'.", accept = c(".csv", ".tsv")),
                     h3("Simulation type"),br(),
                     radioButtons("simulationtype", label = ("Which type of simulation do you want to use ?"), choices = c("Random simulation", "Data driven simulation"), selected = NULL)
                 ),
@@ -101,20 +102,22 @@ ui <- fluidPage(
                         ),
                         actionButton("buttonRandom", "Go add variable !", class = "btn-primary"),
                         br(), br(), br(),
-                        dataTableOutput("datatable")
+                        dataTableOutput("datatable"),
+                        uiOutput("downloadRan")
                     ),
                     conditionalPanel(
                         condition = "input.simulationtype == 'Data driven simulation'",
                         tabsetPanel(
                           tabPanel(
                             h3("Add data"), br(),
-                            fileInput("addData", "Upload new dataset. The number of cases column must be named 'cases'.", accept = c(".csv", ".tsv")),
+                            fileInput("addData", "Upload new dataset. The name of the column reporting the number of cases must be named 'cases'.", accept = c(".csv", ".tsv")),
                             selectInput("var","Select one column for outcome", choices = character()),
-                            selectInput("class","Select the names of the columns for which you want a classification", choices = character(), multiple = T), #Colonne (time) les colommunes dont on veut une classification
+                            selectInput("class","Select the names of the columns to match the data", choices = character(), multiple = T), #Colonne (time) les colommunes dont on veut une classification
                             br(),
                             actionButton("simulatebtn", "Go simulate!", class = "btn-primary"), 
                             br(), br(), br(),
-                            dataTableOutput("knn")
+                            dataTableOutput("knn"),
+                            uiOutput("downloadSim")
                           ),
                            tabPanel(
                             h3("Advanced parameters", style = "color:lightblue"), br(),
@@ -135,7 +138,7 @@ ui <- fluidPage(
           sidebarLayout(
             sidebarPanel(
               h3("Graph display of parameters"), br(),
-              selectInput("colordata","Select the variable with color (eg. variant)", choices = character()),
+              selectInput("colordata","Select the variable to be displayed in different colors (eg. variant)", choices = character()),
               selectInput("paneldata","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
               radioButtons("Qfilterdata", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
               conditionalPanel(
@@ -188,7 +191,7 @@ ui <- fluidPage(
                        
                 ),
                 column(2,
-                       actionButton("cancelvariablebtn", "Cancel", class = "btn-secondary"),
+                       #actionButton("cancelvariablebtn", "Cancel", class = "btn-secondary"),
                 ),
                 column(3,
                        actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-secondary"),
@@ -203,7 +206,7 @@ ui <- fluidPage(
               #verbatimTextOutput("out"),
               dataTableOutput("enrichment"),
               br(),
-              downloadButton("downloadenrichment", "Download .csv", class = "btn-success")
+              uiOutput("downloadEnrich")
             )
           )
         ),
@@ -212,7 +215,7 @@ ui <- fluidPage(
             sidebarLayout(
                 sidebarPanel(
                     h3("Graph display of parameters"), br(),
-                    selectInput("color","Select the variable with color (eg. variant)", choices = character()),
+                    selectInput("color","Select the variable to be displayed in different colors (eg. variant)", choices = character()),
                     selectInput("panel","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
                     radioButtons("Qfilter", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
                     conditionalPanel(
@@ -297,6 +300,21 @@ server <- function(input, output, session) {
     
     output$datatable <- DT::renderDataTable(dataend(), editable = TRUE)
     
+    output$downloadRan <- renderUI({
+      req(input$buttonRandom, dataend())
+      downloadButton("downloadrandom", "Download .csv", class = "btn-success")
+    })
+    
+    output$downloadrandom <- downloadHandler(
+      filename = function() {
+        paste0("random-simulator", ".csv")
+      },
+      content = function(file) {
+        #vroom::vroom_write(dataend()[-1], file)
+        write.csv(dataend()[-1], file, row.names=FALSE)
+      }
+    )
+    
     #Data driven simulator
     dataAdd <- reactive({
         req(input$addData)
@@ -325,10 +343,42 @@ server <- function(input, output, session) {
         }
     })
     
-    output$knn <- renderDataTable(dataknn(),options = list(pageLength = 10, scrollX=TRUE))
+    output$knn <- renderDataTable(dataknn(), options = list(pageLength = 10, scrollX=TRUE))
+    
+    output$downloadSim <- renderUI({
+      req(input$simulatebtn, dataknn())
+      downloadButton("downloadsimulate", "Download .csv", class = "btn-success")
+    })
+    
+    output$downloadsimulate <- downloadHandler(
+      filename = function() {
+        paste0("data-driven-simulator", ".csv")
+      },
+      content = function(file) {
+        write.csv(dataknn()[-1], file, row.names=FALSE)
+      }
+    )
     
     ### Visualization datasets
     
+    #Mise à jour des paramètres avec les données téléchargées
+    observeEvent(input$dataset, {
+      dataset <<- datadownload()
+      col <- dataset %>% select(!c("time", "cases"))
+      updateSelectInput(session, "colordata", choices = names(col))
+      updateSelectInput(session, "paneldata", choices = names(col))
+      updateSelectInput(session, "filterdata", choices = names(col))
+    })
+    
+    #Mise à jour des paramètres après le random simulator
+    observeEvent(input$buttonRandom, {
+      col <- dataset %>% select(!c("time", "cases"))
+      updateSelectInput(session, "colordata", choices = names(col))
+      updateSelectInput(session, "paneldata", choices = names(col))
+      updateSelectInput(session, "filterdata", choices = names(col))
+    })
+    
+    #Mise à jour des paramètres après le data driven simulator
     observeEvent(input$simulatebtn, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "colordata", choices = names(col))
@@ -339,29 +389,66 @@ server <- function(input, output, session) {
     output$filtergroupdata <- renderUI({
       selectInput("filtergroupdata","Group", choices = unique(dataset[, input$filterdata]))
     })
-
-    output$plot1 <- renderPlot({  #Probleme de data dans les plots ? toujours le même résultat 
+    
+    uniq_variant <- reactive({ 
+      if(!exists("dataset")){dataset <<- datadownload()}
+      uniq_variant <- unique(dataset$variant) 
+      myColors <- rainbow(length(uniq_variant))
+      names(myColors) <- uniq_variant
+      myColors[names(myColors)=="NSQ"] = "#606060"
+      colScale <- scale_fill_manual(name = "variant", values = myColors)
+    })
+    
+    output$plot1 <- renderPlot({
       req(input$addgraphdatabtn, input$dataset)
       if (input$Qfilterdata=="Yes") {
         res <- filter(dataset, get(input$filterdata) == input$filtergroupdata)
-        ggplot(data=res, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, input$filterdata, sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata) #facet_grid(get(input$filter) ~ get(input$panel))
+        if (input$colordata=="variant") {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, input$filterdata, sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata) #facet_grid(get(input$filter) ~ get(input$panel))
+        }
+        else {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, input$filterdata, sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$paneldata) #facet_grid(get(input$filter) ~ get(input$panel))
+        }
       }
       else {
-        ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata)
+        if (input$colordata=="variant") {
+          ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$paneldata)
+        }
+        else {
+          ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$colordata)) + ggtitle(paste("Prediction", input$colordata, input$paneldata, sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$paneldata)
+        }
       }    
     }, res = 96)
     
     
     ### Enrichment
     
-    observeEvent(input$simulatebtn, {
+    #Mise à jour des paramètres avec les données téléchargées
+    observeEvent(input$dataset, {
+      dataset <<- datadownload()
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "variable1", choices = names(col))
       updateSelectInput(session, "variant", choices = names(col))
     })
     
+    #Mise à jour des paramètres après le random simulator
+    observeEvent(input$buttonRandom, {
+      col <- dataset %>% select(!c("time", "cases"))
+      updateSelectInput(session, "variable1", choices = names(col))
+      updateSelectInput(session, "variant", choices = names(col))
+    })
+    
+    #Mise à jour des paramètres après le data driven simulator
+    observeEvent(input$simulatebtn, {
+      col <- dataset %>% select(!c("time", "cases"))
+      updateSelectInput(session, "variable1", choices = names(col))
+      updateSelectInput(session, "variant", choices = names(col))
+    })
+  
     output$variablegroup <- renderUI({
       selectInput("gp","Group", choices = unique(dataset[, input$variable1]))
     })
@@ -369,7 +456,6 @@ server <- function(input, output, session) {
     handler <- reactiveVal(list())
     observeEvent(input$addvariablebtn, {
       new_id <- paste("row", input$addvariablebtn, sep = "_")
-      reactive
       insertUI(
         selector = "#placeholder",
         where = "beforeBegin",
@@ -392,27 +478,49 @@ server <- function(input, output, session) {
       selectInput("groupvar","Group", choices = unique(dataset[, input$variant]))
     })
     
+    enrichment <- eventReactive(input$enrichmentbtn,{
+      #Recupération des deux listes et subset variable/group
+      if(!exists("dataset")){dataset <<- datadownload()}
+      params <- lapply(handler(), function(handle) {handle()})
+      # if(is.null(unlist(params)) ) {
+      #   print("OK")
+      #   enrichment_variant(data_aggregated = dataset,
+      #           variable = input$variable1, group = input$gp,
+      #           col_enrichment = input$variant, group_enrichment=input$groupvar,
+      #           multiplicateur = input$multiplicateur, time ="time")
+      # }
+      # else {
+        df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
+        row_odd <- seq_len(nrow(df)) %% 2   
+        data_row_odd <- df[row_odd == 1, ] 
+        data_row_even <- df[row_odd == 0, ] 
+        enrichment_variant(data_aggregated = dataset,
+                variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
+                col_enrichment = input$variant, group_enrichment=input$groupvar,
+                multiplicateur = input$multiplicateur, time ="time")
+      #}
+    })
+    
+    output$enrichment <- renderDataTable(enrichment(),options = list(pageLength = 10))
+    
+    output$downloadEnrich <- renderUI({
+      req(input$enrichmentbtn, enrichment())
+      downloadButton("downloadenrichment", "Download .csv", class = "btn-success")
+    })
+    
     output$downloadenrichment <- downloadHandler(
       filename = function() {
         paste0("enrichment", ".csv")
       },
       content = function(file) {
-        vroom::vroom_write(enrichment(), file)
+        write.csv(enrichment()[-1], file, row.names=FALSE)
       }
     )
     
-    enrichment <- eventReactive(input$enrichmentbtn,{
-      enrichment_variant(data_aggregated = dataset, # sample_n(dataset,12), 
-                         variable = c(input$variable1), group = c(input$gp),
-                         col_enrichment = input$variant, group_enrichment=input$groupvar,
-                         multiplicateur = input$multiplicateur, time ="time")
-    })
     
-    output$enrichment <- renderDataTable(enrichment(),options = list(pageLength = 10))
-  
     ### Visualization Enrichment
     
-    observeEvent(input$simulatebtn, {
+    observeEvent(input$enrichmentbtn, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "color", choices = names(col))
       updateSelectInput(session, "panel", choices = names(col))
@@ -423,24 +531,28 @@ server <- function(input, output, session) {
       selectInput("filtergroups", "Group", choices = unique(dataset[, input$filter]))
     })
     
-    uniq_variant <- reactive({ #Color à changer
-      uniq_variant <- unique(dataAdd()$variant) #uniq_variant <- unique(dataset[, input$color]
-      myColors <- rainbow(length(uniq_variant))
-      names(myColors) <- uniq_variant
-      myColors[names(myColors)=="NSQ"] = "#606060"
-      colScale <- scale_fill_manual(name = "variant",values = myColors)
-    })
-    
-    output$plots <- renderPlot({ 
+    output$plots <- renderPlot({
       req(input$addgraphbtn, input$dataset)
       if (input$Qfilter=="Yes") {
         res <- filter(dataset, get(input$filter) == input$filtergroups)
-        ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filter, "without enrichment", sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel) #facet_grid(get(input$filter) ~ get(input$panel))
+        if (input$color=="variant") {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filtergroups, "without enrichment", sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+        }
+        else {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filtergroups, "without enrichment", sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$panel)
+        }
       }
       else {
-        ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, "without enrichment", sep=" ")) +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+        if (input$color=="variant") {
+          ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, "without enrichment", sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+        }
+        else {
+          ggplot(data=dataset, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, "without enrichment", sep=" ")) +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$panel)
+        }
       }    
     }, res = 96)
     
@@ -456,7 +568,7 @@ server <- function(input, output, session) {
           geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
       }
     }, res = 96)
-    
+  
 }
 
 # Run the application 
