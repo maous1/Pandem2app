@@ -6,13 +6,12 @@ library(dplyr)
 library(DT)
 library(ggplot2)
 library(Pandem2Application)
+library(spsComps)
 options(shiny.maxRequestSize = 20 * 1024^2)
 
-#Note : la colonne de temsp doit être nomme "time". La colonne pour le nombre de cas doit être nommé "cases"
-
 ###Functions
-#For Random simulator
 
+#For Random simulator
 NumberUIRandom <- function(id){
     ns <- NS(id)
     textInput(ns("obs"), "Group")
@@ -32,7 +31,6 @@ Pourcentage <- function(input, output, session){
 }
 
 #For Enrichment
-
 row_ui <- function(id) {
   ns <- NS(id)
   col <- dataset %>% select(!c("time", "cases"))
@@ -197,13 +195,12 @@ ui <- fluidPage(
                        actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-secondary"),
                 ),
               ),
-              numericInput("multiplicateur", "Multiplication factor", 1.2,
-                           1, 10000000, 0.1),
-              actionButton("enrichmentbtn", "Go enrichment!", class = "btn-primary")
+              actionButton("relativeriskbtn", "Display Relative Risk", class = "btn-info"),
+              br(),
+              uiOutput("RR")
             ),
             mainPanel(
               br(),
-              #verbatimTextOutput("out"),
               dataTableOutput("enrichment"),
               br(),
               uiOutput("downloadEnrich")
@@ -294,7 +291,6 @@ server <- function(input, output, session) {
     )
     
     dataend <- eventReactive(input$buttonRandom, {
-        if(!exists("dataset")){dataset <<- datadownload()}
         dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test())
     })
     
@@ -310,8 +306,7 @@ server <- function(input, output, session) {
         paste0("random-simulator", ".csv")
       },
       content = function(file) {
-        #vroom::vroom_write(dataend()[-1], file)
-        write.csv(dataend()[-1], file, row.names=FALSE)
+        write.csv(dataend(), file, row.names=FALSE)
       }
     )
     
@@ -334,7 +329,6 @@ server <- function(input, output, session) {
     
     #Go simulate
     dataknn <- eventReactive(input$simulatebtn, {
-        if(!exists("dataset")){dataset <<- datadownload()}
         if(input$split == "Yes"){
           dataset <<- simulator(trainset = dataAdd(), testset = dataset, geolocalisation = input$geolocalisation, time = input$class, outcome=input$var, count = "cases", factor= input$factor)
         }
@@ -355,13 +349,13 @@ server <- function(input, output, session) {
         paste0("data-driven-simulator", ".csv")
       },
       content = function(file) {
-        write.csv(dataknn()[-1], file, row.names=FALSE)
+        write.csv(dataknn(), file, row.names=FALSE)
       }
     )
     
     ### Visualization datasets
     
-    #Mise à jour des paramètres avec les données téléchargées
+    #Update params after download dataset
     observeEvent(input$dataset, {
       dataset <<- datadownload()
       col <- dataset %>% select(!c("time", "cases"))
@@ -370,7 +364,7 @@ server <- function(input, output, session) {
       updateSelectInput(session, "filterdata", choices = names(col))
     })
     
-    #Mise à jour des paramètres après le random simulator
+    #Update params after random simulator
     observeEvent(input$buttonRandom, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "colordata", choices = names(col))
@@ -378,7 +372,7 @@ server <- function(input, output, session) {
       updateSelectInput(session, "filterdata", choices = names(col))
     })
     
-    #Mise à jour des paramètres après le data driven simulator
+    #Update params after data driven simulator
     observeEvent(input$simulatebtn, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "colordata", choices = names(col))
@@ -391,7 +385,6 @@ server <- function(input, output, session) {
     })
     
     uniq_variant <- reactive({ 
-      if(!exists("dataset")){dataset <<- datadownload()}
       uniq_variant <- unique(dataset$variant) 
       myColors <- rainbow(length(uniq_variant))
       names(myColors) <- uniq_variant
@@ -427,7 +420,7 @@ server <- function(input, output, session) {
     
     ### Enrichment
     
-    #Mise à jour des paramètres avec les données téléchargées
+    #Update params after download dataset
     observeEvent(input$dataset, {
       dataset <<- datadownload()
       col <- dataset %>% select(!c("time", "cases"))
@@ -435,22 +428,56 @@ server <- function(input, output, session) {
       updateSelectInput(session, "variant", choices = names(col))
     })
     
-    #Mise à jour des paramètres après le random simulator
+    #Update params after random simulator
     observeEvent(input$buttonRandom, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "variable1", choices = names(col))
       updateSelectInput(session, "variant", choices = names(col))
     })
     
-    #Mise à jour des paramètres après le data driven simulator
+    #Update params after data driven simulator
     observeEvent(input$simulatebtn, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "variable1", choices = names(col))
       updateSelectInput(session, "variant", choices = names(col))
     })
   
+    output$vargroup <- renderUI({
+      selectInput("groupvar","Group", choices = unique(dataset[, input$variant]))
+    })
+    
     output$variablegroup <- renderUI({
       selectInput("gp","Group", choices = unique(dataset[, input$variable1]))
+    })
+    
+    counter <- reactiveVal(0)
+    observeEvent(input$addvariablebtn, counter(counter() + 1))
+    
+    rr <- eventReactive(input$relativeriskbtn,{
+      if(counter() > 0) {
+        params <- lapply(handler(), function(handle) {handle()})
+        df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
+        row_odd <- seq_len(nrow(df)) %% 2
+        data_row_odd <- df[row_odd == 1, ]
+        data_row_even <- df[row_odd == 0, ]
+        relatif_risk(data_aggregated = dataset,
+                     variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
+                     col_enrichment = input$variant, group_enrichment=input$groupvar)
+      }
+      else {
+        relatif_risk(data_aggregated = dataset,
+                     variable = input$variable1, group = input$gp,
+                     col_enrichment = input$variant, group_enrichment=input$groupvar) 
+      }
+    })
+    
+    output$RR <- renderUI({
+      req(input$relativeriskbtn)
+      div(
+        br(),
+        numericInput("multiplicateur", "Relative risk", round(rr(), digits = 2), 0, 1000, 0.01),
+        actionButton("enrichmentbtn", "Go enrichment!", class = "btn-primary")
+      )
     })
     
     handler <- reactiveVal(list())
@@ -468,40 +495,38 @@ server <- function(input, output, session) {
       handler(handler_list)
     })
     
-    output$out <- renderPrint({
-      lapply(handler(), function(handle) {
-        handle()
-      })
-    })
-    
-    output$vargroup <- renderUI({
-      selectInput("groupvar","Group", choices = unique(dataset[, input$variant]))
-    })
-    
     enrichment <- eventReactive(input$enrichmentbtn,{
-      #Recupération des deux listes et subset variable/group
-      if(!exists("dataset")){dataset <<- datadownload()}
-      params <- lapply(handler(), function(handle) {handle()})
-      # if(is.null(unlist(params)) ) {
-      #   print("OK")
-      #   enrichment_variant(data_aggregated = dataset,
-      #           variable = input$variable1, group = input$gp,
-      #           col_enrichment = input$variant, group_enrichment=input$groupvar,
-      #           multiplicateur = input$multiplicateur, time ="time")
-      # }
-      # else {
+      req(input$relativeriskbtn)
+      if(counter() > 0) {
+        params <- lapply(handler(), function(handle) {handle()})
         df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
-        row_odd <- seq_len(nrow(df)) %% 2   
-        data_row_odd <- df[row_odd == 1, ] 
-        data_row_even <- df[row_odd == 0, ] 
-        enrichment_variant(data_aggregated = dataset,
-                variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
-                col_enrichment = input$variant, group_enrichment=input$groupvar,
-                multiplicateur = input$multiplicateur, time ="time")
-      #}
+        row_odd <- seq_len(nrow(df)) %% 2
+        data_row_odd <- df[row_odd == 1, ]
+        data_row_even <- df[row_odd == 0, ]
+        spsComps::shinyCatch({ #Display warning in UI
+          enrichment_variant(data_aggregated = dataset,
+                             variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
+                             col_enrichment = input$variant, group_enrichment=input$groupvar,
+                             multiplicateur = input$multiplicateur, time ="time")
+        },
+        blocking_level = "error",
+        prefix = "Enrichment"
+        )
+      }
+      else {
+        spsComps::shinyCatch({ #Display warning in UI
+          enrichment_variant(data_aggregated = datadownload(),
+                             variable = input$variable1, group = input$gp,
+                             col_enrichment = input$variant, group_enrichment=input$groupvar,
+                             multiplicateur = input$multiplicateur, time ="time")
+        },
+        blocking_level = "error",
+        prefix = "Enrichment" 
+        )
+      }
     })
     
-    output$enrichment <- renderDataTable(enrichment(),options = list(pageLength = 10))
+    output$enrichment <- renderDataTable(enrichment(), options = list(pageLength = 10))
     
     output$downloadEnrich <- renderUI({
       req(input$enrichmentbtn, enrichment())
@@ -513,7 +538,7 @@ server <- function(input, output, session) {
         paste0("enrichment", ".csv")
       },
       content = function(file) {
-        write.csv(enrichment()[-1], file, row.names=FALSE)
+        write.csv(enrichment(), file, row.names=FALSE)
       }
     )
     
