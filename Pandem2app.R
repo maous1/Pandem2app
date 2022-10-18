@@ -5,6 +5,7 @@ library(tidyr)
 library(dplyr)
 library(DT)
 library(ggplot2)
+library(spsComps)
 library(Pandem2Application)
 options(shiny.maxRequestSize = 20 * 1024^2)
 
