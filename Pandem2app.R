@@ -6,7 +6,6 @@ library(dplyr)
 library(DT)
 library(ggplot2)
 library(Pandem2Application)
-library(spsComps)
 options(shiny.maxRequestSize = 20 * 1024^2)
 
 ###Functions
