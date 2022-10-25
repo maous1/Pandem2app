@@ -70,7 +70,7 @@ ui <- fluidPage(
     ),
     navbarPage(
         theme = shinythemes::shinytheme("cerulean"),
-        title = span("Multiparametic simulator", style = "color: black"),
+        title = span("Multiparametric simulator", style = "color: black"),
         id="main_navbar",
         tabPanel(
             "1) Datasets",
