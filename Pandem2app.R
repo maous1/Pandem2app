@@ -281,14 +281,14 @@ server <- function(input, output, session) {
         })))
     })
     
-    observe(
+    observeEvent(test2(), {
         if(sum(test2())==1){
             show("buttonRandom")
         }
         else{
             hide("buttonRandom")
         }
-    )
+    })
     
     dataend <- eventReactive(input$buttonRandom, {
         dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test())
