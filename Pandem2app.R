@@ -5,8 +5,8 @@ library(tidyr)
 library(dplyr)
 library(DT)
 library(ggplot2)
-library(spsComps)
 library(Pandem2Application)
+library(spsComps)
 options(shiny.maxRequestSize = 20 * 1024^2)
 
 ###Functions
@@ -281,16 +281,16 @@ server <- function(input, output, session) {
         })))
     })
     
-    observeEvent(test2(), {
-        if(sum(test2())==1){
-            show("buttonRandom")
-        }
-        else{
-            hide("buttonRandom")
-        }
-    })
-    
+     observeEvent(input$simulationtype == 'Data driven simulation', {
+       reset("nomVariable")
+       reset("numInputs")
+       reset("inputGroupRandom")
+       reset("inputpourcentage")
+     })
+     
     dataend <- eventReactive(input$buttonRandom, {
+        req(datadownload())
+        req(sum(test2())==1)
         dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test())
     })
     
@@ -309,6 +309,8 @@ server <- function(input, output, session) {
         write.csv(dataend(), file, row.names=FALSE)
       }
     )
+    
+    
     
     #Data driven simulator
     dataAdd <- reactive({
