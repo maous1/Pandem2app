@@ -517,7 +517,7 @@ server <- function(input, output, session) {
       }
       else {
         spsComps::shinyCatch({ #Display warning in UI
-          enrichment_variant(data_aggregated = datadownload(),
+          enrichment_variant(data_aggregated = dataset,
                              variable = input$variable1, group = input$gp,
                              col_enrichment = input$variant, group_enrichment=input$groupvar,
                              multiplicateur = input$multiplicateur, time ="time")
