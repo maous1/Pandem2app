@@ -563,11 +563,11 @@ server <- function(input, output, session) {
       if (input$Qfilter=="Yes") {
         res <- filter(dataset, get(input$filter) == input$filtergroups)
         if (input$color=="variant") {
-          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filtergroups, "without enrichment", sep=" ")) +
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filter, input$filtergroups, "without enrichment", sep=" ")) +
             geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
         }
         else {
-          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filtergroups, "without enrichment", sep=" ")) +
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle(paste("Prediction", input$color, input$panel, input$filter, input$filtergroups, "without enrichment", sep=" ")) +
             geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$panel)
         }
       }
@@ -587,14 +587,27 @@ server <- function(input, output, session) {
       req(input$addgraphbtn, enrichment())
       if (input$Qfilter=="Yes") {
         res <- filter(enrichment(), get(input$filter) == input$filtergroups)
-        ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel) #facet_wrap(vars(group))
+        if (input$color=="variant") {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+        }
+        else {
+          ggplot(data=res, aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$panel)
+        }
       }
       else {
-        ggplot(data=enrichment(), aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
-          geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
-      }
+        if (input$color=="variant") {
+          ggplot(data=enrichment(), aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + uniq_variant() + facet_wrap(input$panel)
+        }
+        else {
+          ggplot(data=enrichment(), aes_string(x="time", y="cases", fill=input$color)) + ggtitle("With enrichment") +
+            geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(input$panel)
+        }
+      }    
     }, res = 96)
+}
   
 }
 
