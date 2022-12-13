@@ -79,7 +79,7 @@ ui <- fluidPage(
                     width = 4,
                     h3("Upload data"),br(),
                     fileInput("dataset", "The dataset to which we will add a metadata. The name of the column reporting the number of cases must be named 'cases'.", accept = c(".csv", ".tsv")),
-                    h3("Simulation type"),br(),
+                    h3("Simulation type"), br(),
                     radioButtons("simulationtype", label = ("Which type of simulation do you want to use ?"), choices = c("Random simulation", "Data driven simulation"), selected = NULL)
                 ),
                 mainPanel(
@@ -87,7 +87,7 @@ ui <- fluidPage(
                         condition = "input.simulationtype == 'Random simulation'",
                         br(), h3("Random simulation"), br(),
                         textInput("nomVariable", "Name new variable", value = "", placeholder =  "vaccination"),
-                        numericInput("numInputs", "How many inputs do you want ?", 2),
+                        numericInput("numInputs", "How many inputs do you want ?", 1),
                         fluidRow(
                             column(4,
                                    br(),br(), br(),
@@ -110,7 +110,7 @@ ui <- fluidPage(
                             h3("Add data"), br(),
                             fileInput("addData", "Upload new dataset. The name of the column reporting the number of cases must be named 'cases'.", accept = c(".csv", ".tsv")),
                             selectInput("var","Select one column for outcome", choices = character()),
-                            selectInput("class","Select the names of the columns to match the data", choices = character(), multiple = T), #Colonne (time) les colommunes dont on veut une classification
+                            selectInput("class","Select the names of the columns to match the data", choices = character(), multiple = T), #Colonne (time) les colonnes dont on veut une classification
                             br(),
                             actionButton("simulatebtn", "Go simulate!", class = "btn-primary"), 
                             br(), br(), br(),
@@ -241,18 +241,18 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-    
+  
     ###Upload data
     datadownload <- reactive({
         req(input$dataset)
-        
         ext <- tools::file_ext(input$dataset$name)
         switch(ext,
                csv = vroom::vroom(input$dataset$datapath, delim = ","),
                tsv = vroom::vroom(input$dataset$datapath, delim = "\t"),
                validate("Invalid file; Please upload a .csv or .tsv file")
         )
-    })
+     })
+    
     
     #Random simulator
     observeEvent(input$numInputs, {
@@ -271,12 +271,12 @@ server <- function(input, output, session) {
     })
     
     test <- reactive({
-        c(unlist(lapply(1:input$numInputs, function(i) {
+        c(unlist(lapply(0:input$numInputs, function(i) {
             callModule(GroupRandom, as.character(i))()
         })))
     })
     test2 <- reactive({
-        c(unlist(lapply(1:input$numInputs, function(i) {
+        c(unlist(lapply(0:input$numInputs, function(i) {
             callModule(Pourcentage, as.character(i))()
         })))
     })
@@ -289,9 +289,15 @@ server <- function(input, output, session) {
      })
      
     dataend <- eventReactive(input$buttonRandom, {
-        req(datadownload())
-        req(sum(test2())==1)
-        dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test())
+       validate(
+        need(datadownload(), "Warning Upload data set."))
+       validate(
+         need(sum(test2())==1, "The sum of the sliders must be equal to 1."))
+       reset("nomVariable")
+       reset("numInputs")
+       reset("inputGroupRandom")
+       reset("inputpourcentage")
+       spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test()) })
     })
     
     output$datatable <- DT::renderDataTable(dataend(), editable = TRUE)
@@ -309,8 +315,7 @@ server <- function(input, output, session) {
         write.csv(dataend(), file, row.names=FALSE)
       }
     )
-    
-    
+  
     
     #Data driven simulator
     dataAdd <- reactive({
@@ -323,6 +328,13 @@ server <- function(input, output, session) {
         )
     })
     
+    observeEvent(input$simulationtype == 'Random simulation', {
+      reset("var")
+      reset("class")
+      reset("geolocalisation")
+      reset("addData")
+    })
+    
     observeEvent(dataAdd(), {
       updateSelectInput(session, "var", choices = names(dataAdd()))
       updateSelectInput(session, "class", choices = names(dataAdd()))
@@ -331,12 +343,14 @@ server <- function(input, output, session) {
     
     #Go simulate
     dataknn <- eventReactive(input$simulatebtn, {
+      spsComps::shinyCatch({
         if(input$split == "Yes"){
           dataset <<- simulator(trainset = dataAdd(), testset = dataset, geolocalisation = input$geolocalisation, time = input$class, outcome=input$var, count = "cases", factor= input$factor)
         }
         if(input$split == "No"){
           dataset <<- simulator_withoutsplit(trainset = dataAdd(), testset = dataset, time = input$class, outcome=input$var, count = "cases", factor= input$factor)
         }
+      })
     })
     
     output$knn <- renderDataTable(dataknn(), options = list(pageLength = 10, scrollX=TRUE))
@@ -359,6 +373,8 @@ server <- function(input, output, session) {
     
     #Update params after download dataset
     observeEvent(input$dataset, {
+      validate(
+        need(input$dataset$datapath, "Warning Upload data set2"))
       dataset <<- datadownload()
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "colordata", choices = names(col))
@@ -518,9 +534,9 @@ server <- function(input, output, session) {
       else {
         spsComps::shinyCatch({ #Display warning in UI
           enrichment_variant(data_aggregated = dataset,
-                             variable = input$variable1, group = input$gp,
-                             col_enrichment = input$variant, group_enrichment=input$groupvar,
-                             multiplicateur = input$multiplicateur, time ="time")
+                            variable = input$variable1, group = input$gp,
+                            col_enrichment = input$variant, group_enrichment=input$groupvar,
+                            multiplicateur = input$multiplicateur, time ="time")
         },
         blocking_level = "error",
         prefix = "Enrichment" 
@@ -607,8 +623,6 @@ server <- function(input, output, session) {
         }
       }    
     }, res = 96)
-}
-  
 }
 
 # Run the application 
