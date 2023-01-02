@@ -110,7 +110,7 @@ ui <- fluidPage(
                             h3("Add data"), br(),
                             fileInput("addData", "Upload new dataset. The name of the column reporting the number of cases must be named 'cases'.", accept = c(".csv", ".tsv")),
                             selectInput("var","Select one column for outcome", choices = character()),
-                            selectInput("class","Select the names of the columns to match the data", choices = character(), multiple = T), #Colonne (time) les colonnes dont on veut une classification
+                            selectInput("class","Select the names of the columns to match the data", choices = character(), multiple = T), 
                             br(),
                             actionButton("simulatebtn", "Go simulate!", class = "btn-primary"), 
                             br(), br(), br(),
@@ -122,7 +122,7 @@ ui <- fluidPage(
                             radioButtons("split", label = "Split by", choices = c("Yes", "No"), selected = "No"),
                             conditionalPanel(
                               condition = "input.split == 'Yes'",
-                              selectInput("geolocalisation","Which column ?", choices = character(), selected = 1), #Split by (geolocalisation)
+                              selectInput("geolocalisation","Which column ?", choices = character(), selected = 1),
                             ),
                             numericInput("factor", "Sequence number used by time for the trainset to reduce the execution time (factor)", 500, 1, 10000000, 1)
                            )
@@ -297,7 +297,12 @@ server <- function(input, output, session) {
        reset("numInputs")
        reset("inputGroupRandom")
        reset("inputpourcentage")
-       spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test()) })
+       if (grepl("\\s", input$nomVariable)) {
+         spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = sub(" ", "_", input$nomVariable), pourcentage = test2(), group = test()) })
+       } 
+       else {
+         spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = input$nomVariable, pourcentage = test2(), group = test()) })
+       }
     })
     
     output$datatable <- DT::renderDataTable(dataend(), editable = TRUE)
@@ -316,7 +321,7 @@ server <- function(input, output, session) {
       }
     )
   
-    
+
     #Data driven simulator
     dataAdd <- reactive({
         req(input$addData)
@@ -369,12 +374,13 @@ server <- function(input, output, session) {
       }
     )
     
+    
     ### Visualization datasets
     
     #Update params after download dataset
     observeEvent(input$dataset, {
       validate(
-        need(input$dataset$datapath, "Warning Upload data set2"))
+        need(input$dataset$datapath, "Warning Upload a second dataset."))
       dataset <<- datadownload()
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "colordata", choices = names(col))
@@ -521,7 +527,7 @@ server <- function(input, output, session) {
         row_odd <- seq_len(nrow(df)) %% 2
         data_row_odd <- df[row_odd == 1, ]
         data_row_even <- df[row_odd == 0, ]
-        spsComps::shinyCatch({ #Display warning in UI
+        spsComps::shinyCatch({ 
           enrichment_variant(data_aggregated = dataset,
                              variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
                              col_enrichment = input$variant, group_enrichment=input$groupvar,
@@ -532,7 +538,7 @@ server <- function(input, output, session) {
         )
       }
       else {
-        spsComps::shinyCatch({ #Display warning in UI
+        spsComps::shinyCatch({ 
           enrichment_variant(data_aggregated = dataset,
                             variable = input$variable1, group = input$gp,
                             col_enrichment = input$variant, group_enrichment=input$groupvar,
@@ -562,7 +568,6 @@ server <- function(input, output, session) {
     
     
     ### Visualization Enrichment
-    
     observeEvent(input$enrichmentbtn, {
       col <- dataset %>% select(!c("time", "cases"))
       updateSelectInput(session, "color", choices = names(col))
