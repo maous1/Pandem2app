@@ -33,27 +33,50 @@ Pourcentage <- function(input, output, session){
 #For Enrichment
 row_ui <- function(id) {
   ns <- NS(id)
-  col <- dataset %>% select(!c("time", "cases"))
   fluidRow(
-    column(4, 
-           selectInput(ns("addvariableinput"), "Variable", choices = names(col)),
-    ),
-    column(4,
-           uiOutput(ns("ui_placeholder"))
-    )
+    column(4, shiny::uiOutput(ns("EnrichVar"))),
+    column(8, shiny::uiOutput(ns("EnrichGroup")))
   )
 } 
 
-row_server <- function(input, output, session) {
-  return_value <- reactive({input$addgplabel})
-  return_value2 <- reactive({input$addvariableinput})
-  ns <- session$ns
-  output$ui_placeholder <- renderUI({
-    selectInput(ns("addgplabel"),"Group", choices = unique(dataset[, input$addvariableinput]))
-  })
-  list(return_value = return_value, return_value2 = return_value2) 
+remove_shiny_inputs <- function(id, .input) {
+  invisible(
+    lapply(grep(id, names(.input), value = TRUE), function(i) {
+      .subset2(.input, "impl")$.values$remove(i)
+    })
+  )
 }
 
+EnrichVarModule <- function(input, output, session) { #row_server
+  return_value <- reactive({input$addgplabel})
+  return_value2 <- reactive({input$addvariableinput})
+  col <- dataset %>% select(!c("time", "cases"))
+  output[['EnrichVar']] <- renderUI({
+    ns <- session$ns
+    tags$div(id = environment(ns)[['namespace']],
+      tagList(
+        selectInput(ns("addvariableinput"), "Variable", choices = names(col)),
+      )
+    )
+  })
+  output[['EnrichGroup']] <- renderUI({
+    ns <- session$ns
+    tags$div(id = environment(ns)[['namespace']],
+             tagList(
+               fluidRow(
+                 column(6, 
+                        selectInput(ns("addgplabel"),"Group", choices = unique(dataset[, input$addvariableinput]))
+                 ),br(),
+                 column(6,
+                        column(3, actionButton(ns('deleteButton'), '', icon = shiny::icon('times', verify_fa = FALSE) , class = "btn-warning")),
+                        column(6, h5("Click twice", style="color:#ff5233 ; margin-top: 3px;")),
+                 )
+               )
+             )
+    )
+  })
+  list(return_value = return_value, return_value2 = return_value2)
+}
 
 ### User Interface
 ui <- fluidPage(
@@ -112,7 +135,7 @@ ui <- fluidPage(
                    )
                  )),
             actionButton("buttonRandom", "Go add variable !", class = "btn-primary"),
-            actionButton("buttonremove", "Go remove !", class = "btn-warning"), 
+            disabled(actionButton("buttonremove", "Go remove !", class = "btn-warning")),
             br(), br(), br(),
             dataTableOutput("datatable"),
             uiOutput("downloadRan")
@@ -129,7 +152,7 @@ ui <- fluidPage(
                 ),
                 br(),
                 actionButton("simulatebtn", "Go simulate!", class = "btn-primary"), 
-                actionButton("buttonremovedriven", "Go remove !", class = "btn-warning"), 
+                disabled(actionButton("buttonremovedriven", "Go remove !", class = "btn-warning")),
                 br(), br(), br(),
                 dataTableOutput("dataknn"),
                 uiOutput("downloadSim")
@@ -200,19 +223,9 @@ ui <- fluidPage(
                    uiOutput('variablegroup'),
             ),
           ),
-          div(id="placeholder"),
-          fluidRow(
-            column(5,
-                   
-            ),
-            column(2,
-                   #actionButton("cancelvariablebtn", "Cancel", class = "btn-secondary"),
-            ),
-            column(3,
-                   actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-secondary"),
-            ),
-          ),
-          actionButton("relativeriskbtn", "Display Relative Risk", class = "btn-info"),
+          actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-info", style="margin-left: 355px;"),
+          br(),
+          actionButton("relativeriskbtn", "Display Relative Risk", class = "btn-primary"),
           br(),
           uiOutput("RR")
         ),
@@ -302,7 +315,7 @@ server <- function(input, output, session) {
   observeEvent(input$simulationtype == 'Data driven simulation', {
     reset("randomsim")
   })
-  
+
   choice <<- "NULL"
   observeEvent(input$buttonRandom,{choice <<- "addrando"})
   observeEvent(input$simulatebtn,{choice <<- "addsimu"})
@@ -311,14 +324,24 @@ server <- function(input, output, session) {
   removedataset <<- c()
   
   dataend <- eventReactive(input$buttonRandom| input$buttonremove | input$simulatebtn | input$buttonremovedriven,{
+    #print(choice)
     if(choice == "addrando"){
-      removedataset <<- c(gsub(" ", "_", input$nomVariable), removedataset)
       validate(
         need(datadownload(), "Warning Upload data set."))
       validate(
         need(sum(test2())==1, "The sum of the sliders must be equal to 1."))
+      req(sum(test2())==1)
+      removedataset <<- c(gsub(" ", "_", input$nomVariable), removedataset)
       spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = gsub(" ", "_", input$nomVariable), pourcentage = test2(), group = test()) })
       reset("randomsim")
+      if (!rlang::is_empty(removedataset)) {
+        enable("buttonremove")
+        enable("buttonremovedriven")
+      }
+      else {
+        disable("buttonremove")
+        disable("buttonremovedriven")
+      }
       return(dataset)
     }else if (choice == "addsimu"){
       removedataset <<- c(input$var, removedataset)
@@ -332,15 +355,31 @@ server <- function(input, output, session) {
       })
       reset("datadrivensim")
       reset("geolocalisation")
+      if (!rlang::is_empty(removedataset)) {
+        enable("buttonremove")
+        enable("buttonremovedriven")
+      }
+      else {
+        disable("buttonremove")
+        disable("buttonremovedriven")
+      }
       return(dataset)
     }else if (choice == "remove"){
       dataset <<- dataset %>% select(-removedataset[1])
       lnom <- length(colnames(dataset))-1
       dataset <<- dataset %>% group_by(across({colnames(dataset)[1:lnom]})) %>% summarise(cases = sum(cases))
       removedataset <<- removedataset[-1]
+      if (!rlang::is_empty(removedataset)) {
+        enable("buttonremove")
+        enable("buttonremovedriven")
+      }
+      else {
+        disable("buttonremove")
+        disable("buttonremovedriven")
+      }
       return(dataset)
     }
-    })
+  })
   
   output$datatable <-{DT::renderDataTable(dataend(), editable = TRUE)} 
   
@@ -484,6 +523,7 @@ server <- function(input, output, session) {
   observeEvent(input$addvariablebtn, counter(counter() + 1))
   
   rr <- eventReactive(input$relativeriskbtn,{
+    #print(counter)
     if(counter() > 0) {
       params <- lapply(handler(), function(handle) {handle()})
       df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
@@ -512,27 +552,44 @@ server <- function(input, output, session) {
   
   handler <- reactiveVal(list())
   observeEvent(input$addvariablebtn, {
-    new_id <- paste("row", input$addvariablebtn, sep = "_")
+    i <- sprintf('%04d', input$addvariablebtn)
+    id <- sprintf('EnrichGroup%s', i)
     insertUI(
-      selector = "#placeholder",
+      selector = '#addvariablebtn',
       where = "beforeBegin",
-      ui = row_ui(new_id)
+      ui= row_ui(id)
     )
+    print("ok")
     handler_list <- isolate(handler())
-    new_handler <- callModule(row_server, new_id)
+    new_handler <- callModule(EnrichVarModule, id)
+    print("ok1")
     handler_list <- c(handler_list, new_handler)
-    names(handler_list)[length(handler_list)] <- new_id
+    names(handler_list)[length(handler_list)] <- id
     handler(handler_list)
+    print("ok2")
+    observeEvent(input[[paste0(id, '-deleteButton')]], {
+      j <- as.integer(input[[paste0(id, '-deleteButton')]])
+      if((j %% 2) == 0) {
+        counter(counter()-1)
+        if (counter() == 0) {
+          handler <- NULL
+        }
+      }
+      removeUI(selector = sprintf('#%s', id), multiple=TRUE)
+      remove_shiny_inputs(id, input)
+      
+    })
+    print("ok3")
   })
   
   enrichment <- eventReactive(input$enrichmentbtn,{
     req(input$relativeriskbtn)
     if(counter() > 0) {
       params <- lapply(handler(), function(handle) {handle()})
-      df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
+      df <- data.frame(matrix(unlist(params), nrow=length(unlist(params)), byrow=TRUE))
       row_odd <- seq_len(nrow(df)) %% 2
-      data_row_odd <- df[row_odd == 1, ]
-      data_row_even <- df[row_odd == 0, ]
+      data_row_odd <- na.omit(df[row_odd == 1, ])
+      data_row_even <- na.omit(df[row_odd == 0, ])
       spsComps::shinyCatch({
         enrichment_variant(data_aggregated = dataset,
                            variable = c(input$variable1, data_row_even), group = c(input$gp, data_row_odd),
