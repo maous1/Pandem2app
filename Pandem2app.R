@@ -330,7 +330,6 @@ server <- function(input, output, session) {
         need(datadownload(), "Warning Upload data set."))
       validate(
         need(sum(test2())==1, "The sum of the sliders must be equal to 1."))
-      req(sum(test2())==1)
       removedataset <<- c(gsub(" ", "_", input$nomVariable), removedataset)
       spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = gsub(" ", "_", input$nomVariable), pourcentage = test2(), group = test()) })
       reset("randomsim")
@@ -523,7 +522,6 @@ server <- function(input, output, session) {
   observeEvent(input$addvariablebtn, counter(counter() + 1))
   
   rr <- eventReactive(input$relativeriskbtn,{
-    #print(counter)
     if(counter() > 0) {
       params <- lapply(handler(), function(handle) {handle()})
       df <- data.frame(matrix(unlist(params), nrow=length(params), byrow=TRUE))
