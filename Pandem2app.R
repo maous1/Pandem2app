@@ -14,12 +14,12 @@ options(shiny.maxRequestSize = 20 * 1024^2)
 #For Random simulator
 NumberUIRandom <- function(id){
   ns <- NS(id)
-  textInput(ns("obs"), "Group")
+  textInput(ns("obs"), "Category")
 }
 
 PourcentageUI <- function(id){
   ns <- NS(id)
-  sliderInput(ns("Pourcent"), "Pourcentage", 0, 1, 0.1)
+  sliderInput(ns("Pourcent"), "Percentage", 0, 1, 0.1)
 }
 
 GroupRandom <- function(input, output, session){
@@ -65,11 +65,11 @@ EnrichVarModule <- function(input, output, session) { #row_server
              tagList(
                fluidRow(
                  column(6, 
-                        selectInput(ns("addgplabel"),"Group", choices = unique(dataset[, input$addvariableinput]))
+                        selectInput(ns("addgplabel"),"Category", choices = unique(dataset[, input$addvariableinput]))
                  ),br(),
                  column(6,
                         column(3, actionButton(ns('deleteButton'), '', icon = shiny::icon('times', verify_fa = FALSE) , class = "btn-warning")),
-                        column(6, h5("Click twice", style="color:#ff5233 ; margin-top: 3px;")),
+                        column(6, h5("Click twice", style="color:#ff5233 ; margin-top: 3px; float:right;")),
                  )
                )
              )
@@ -123,7 +123,7 @@ ui <- fluidPage(
             br(), h3("Random simulation"), br(),
             div (id = "randomsim",
                  textInput("nomVariable", "Name new variable", value = "", placeholder =  "vaccination"),
-                 numericInput("numInputs", "How many inputs do you want ?", 1, min = 2),
+                 numericInput("numInputs", "How many categories do you want in the new variable ?", 1, min = 2),
                  fluidRow(
                    column(4,
                           br(),br(), br(),
@@ -134,6 +134,7 @@ ui <- fluidPage(
                           uiOutput("inputpourcentage"),
                    )
                  )),
+            #textOutput('final2'),
             actionButton("buttonRandom", "Go add variable !", class = "btn-primary"),
             disabled(actionButton("buttonremove", "Go remove !", class = "btn-warning")),
             br(), br(), br(),
@@ -177,7 +178,7 @@ ui <- fluidPage(
         sidebarPanel(
           h3("Graph display of parameters"), br(),
           selectInput("colordata","Select the variable to be displayed in different colors (eg. variant)", choices = character()),
-          selectInput("paneldata","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
+          selectInput("paneldata","Select the variable to be displayed in different panels (eg. age_group)", choices = character()),
           radioButtons("Qfilterdata", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
           conditionalPanel(
             condition = "input.Qfilterdata == 'Yes'",
@@ -205,7 +206,7 @@ ui <- fluidPage(
       sidebarLayout(
         sidebarPanel(
           h3("Parameters"), br(),
-          h5("Which level of which variable (eg. variant) and group (eg. B.1.1.7) do you want to enrich ?", style="color:#555658; font-weight:bold"),
+          h5("Specify the variable (e.g. variant) and the category (e.g. B.1.1.7) to enrich", style="color:#555658; font-weight:bold"),
           fluidRow(
             column(4,
                    selectInput("variant","Variable ", choices = character()),
@@ -214,7 +215,7 @@ ui <- fluidPage(
                    uiOutput('vargroup'),
             ),
           ),
-          h5("In which variable(s) and group(s) do you want to apply the enrichment (eg. age_group <15y) ?", style="color:#555658; font-weight:bold"), 
+          h5("Specify the variable(s) (e.g. age_group) and the category (e.g 25-49 yr) defining the population to be enriched", style="color:#555658; font-weight:bold"), 
           fluidRow(
             column(4,
                    selectInput("variable1", "Variable", choices = character()),
@@ -223,8 +224,8 @@ ui <- fluidPage(
                    uiOutput('variablegroup'),
             ),
           ),
-          actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-info", style="margin-left: 355px;"),
-          br(),
+          actionButton("addvariablebtn", HTML("Add new variable <br/> and group"), class = "btn-info", style="float:right"), 
+          br(), br(), br(),
           actionButton("relativeriskbtn", "Display Relative Risk", class = "btn-primary"),
           br(),
           uiOutput("RR")
@@ -243,7 +244,7 @@ ui <- fluidPage(
         sidebarPanel(
           h3("Graph display of parameters"), br(),
           selectInput("color","Select the variable to be displayed in different colors (eg. variant)", choices = character()),
-          selectInput("panel","Select the variable to be displayed in panel (eg. age_group)", choices = character()),
+          selectInput("panel","Select the variable to be displayed in different panels (eg. age_group)", choices = character()),
           radioButtons("Qfilter", label = "Do you want to filter with a third variable?", choices = c("Yes", "No"), selected = "No"),
           conditionalPanel(
             condition = "input.Qfilter == 'Yes'",
@@ -324,11 +325,12 @@ server <- function(input, output, session) {
   removedataset <<- c()
   
   dataend <- eventReactive(input$buttonRandom| input$buttonremove | input$simulatebtn | input$buttonremovedriven,{
-    #print(choice)
     if(choice == "addrando"){
       validate(
-        need(datadownload(), "Warning Upload data set."))
+        need(datadownload(), "Warning upload data set."))
       validate(
+        need(test() != "", "Warning, fill in the categories."))
+      validate( 
         need(sum(test2())==1, "The sum of the sliders must be equal to 1."))
       removedataset <<- c(gsub(" ", "_", input$nomVariable), removedataset)
       spsComps::shinyCatch({ dataset <<- add_variable(data = dataset, nomVariable = gsub(" ", "_", input$nomVariable), pourcentage = test2(), group = test()) })
@@ -341,6 +343,7 @@ server <- function(input, output, session) {
         disable("buttonremove")
         disable("buttonremovedriven")
       }
+      choice <<- "NULL"
       return(dataset)
     }else if (choice == "addsimu"){
       removedataset <<- c(input$var, removedataset)
@@ -362,6 +365,7 @@ server <- function(input, output, session) {
         disable("buttonremove")
         disable("buttonremovedriven")
       }
+      choice <<- "NULL"
       return(dataset)
     }else if (choice == "remove"){
       dataset <<- dataset %>% select(-removedataset[1])
@@ -376,6 +380,7 @@ server <- function(input, output, session) {
         disable("buttonremove")
         disable("buttonremovedriven")
       }
+      choice <<- "NULL"
       return(dataset)
     }
   })
@@ -457,7 +462,7 @@ server <- function(input, output, session) {
   })
   
   output$filtergroupdata <- renderUI({
-    selectInput("filtergroupdata","Group", choices = unique(dataset[, input$filterdata]))
+    selectInput("filtergroupdata","Category", choices = unique(dataset[, input$filterdata]))
   })
   
   uniq_variant <- reactive({ 
@@ -511,11 +516,11 @@ server <- function(input, output, session) {
   })
   
   output$vargroup <- renderUI({
-    selectInput("groupvar","Group", choices = unique(dataset[, input$variant]))
+    selectInput("groupvar","Category", choices = unique(dataset[, input$variant]))
   })
   
   output$variablegroup <- renderUI({
-    selectInput("gp","Group", choices = unique(dataset[, input$variable1]))
+    selectInput("gp","Category", choices = unique(dataset[, input$variable1]))
   })
   
   counter <- reactiveVal(0)
@@ -557,14 +562,11 @@ server <- function(input, output, session) {
       where = "beforeBegin",
       ui= row_ui(id)
     )
-    print("ok")
     handler_list <- isolate(handler())
     new_handler <- callModule(EnrichVarModule, id)
-    print("ok1")
     handler_list <- c(handler_list, new_handler)
     names(handler_list)[length(handler_list)] <- id
     handler(handler_list)
-    print("ok2")
     observeEvent(input[[paste0(id, '-deleteButton')]], {
       j <- as.integer(input[[paste0(id, '-deleteButton')]])
       if((j %% 2) == 0) {
@@ -575,9 +577,7 @@ server <- function(input, output, session) {
       }
       removeUI(selector = sprintf('#%s', id), multiple=TRUE)
       remove_shiny_inputs(id, input)
-      
     })
-    print("ok3")
   })
   
   enrichment <- eventReactive(input$enrichmentbtn,{
@@ -637,7 +637,7 @@ server <- function(input, output, session) {
   })
   
   output$filtergroup <- renderUI({
-    selectInput("filtergroups", "Group", choices = unique(dataset[, input$filter]))
+    selectInput("filtergroups", "Category", choices = unique(dataset[, input$filter]))
   })
   
   output$plots <- renderPlot({
